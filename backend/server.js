@@ -70,3 +70,22 @@ mongoose
     console.error("MongoDB connection failed:");
     console.error(error.message);
   });
+
+const allowedOrigin = (origin, callback) => {
+  if (
+    !origin ||
+    origin === process.env.FRONTEND_URL ||
+    origin.endsWith(".vercel.app")
+  ) {
+    callback(null, true);
+  } else {
+    callback(new Error("Not allowed by CORS"));
+  }
+};
+ 
+app.use(
+  cors({
+    origin: allowedOrigin,
+    credentials: true,
+  })
+);
