@@ -53,20 +53,55 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 
-// Database
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log("MongoDB connected successfully");
+// --- Database connection ---
+// Cache the connection across serverless invocations so a warm Lambda
+// doesn't reconnect to MongoDB on every single request.
+let isConnected = false;
 
-    app.listen(PORT, () => {
-      console.log(
-        `Server running at http://localhost:${PORT}`
-      );
-    });
-  })
-  .catch((error) => {
+async function connectDB() {
+  if (isConnected) return;
+
+  if (!process.env.MONGO_URI) {
+    console.error(
+      "MONGO_URI is not set. Add it in your environment (.env locally, " +
+        "Vercel Project Settings > Environment Variables in production)."
+    );
+    return;
+  }
+
+  try {
+    await mongoose.connect(process.env.MONGO_URI);
+    isConnected = true;
+    console.log("MongoDB connected successfully");
+  } catch (error) {
     console.error("MongoDB connection failed:");
     console.error(error.message);
-  });
+  }
+}
 
+// Kick off the connection as soon as this module loads. On Vercel this
+// runs once per cold start; on a normal server it runs once at boot.
+connectDB();
+
+// Make sure every request has a DB connection before it hits a route
+// (covers the case where the very first request arrives before the
+// connectDB() call above has finished).
+app.use(async (req, res, next) => {
+  await connectDB();
+  next();
+});
+
+
+// --- Local dev only ---
+// On Vercel, app.listen() is never used — Vercel invokes the exported
+// app directly as a serverless function per request. Only start a real
+// listener when running locally / on a traditional host.
+if (process.env.VERCEL !== "1" && require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running at http://localhost:${PORT}`);
+  });
+}
+
+// Required so Vercel's @vercel/node runtime can invoke this as a
+// serverless function.
+module.exports = app;
