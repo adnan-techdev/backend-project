@@ -25,34 +25,6 @@ const logger = (req, res, next) => {
 app.use(logger);
 
 
-// Root route
-app.get("/", (req, res) => {
-  res.json({
-    success: true,
-    message: "Task Manager API is running",
-  });
-});
-
-
-// Routes
-app.use("/api/auth", authRoutes);
-
-app.use("/api/tasks", taskRoutes);
-
-
-// 404
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    message: "Route not found",
-  });
-});
-
-
-// Error middleware
-app.use(errorHandler);
-
-
 // --- Database connection ---
 // Cache the connection across serverless invocations so a warm Lambda
 // doesn't reconnect to MongoDB on every single request.
@@ -79,17 +51,46 @@ async function connectDB() {
   }
 }
 
-// Kick off the connection as soon as this module loads. On Vercel this
-// runs once per cold start; on a normal server it runs once at boot.
+// Kick off the connection as soon as this module loads (helps warm
+// invocations skip the wait below).
 connectDB();
 
-// Make sure every request has a DB connection before it hits a route
-// (covers the case where the very first request arrives before the
-// connectDB() call above has finished).
+// IMPORTANT: this must be registered BEFORE any route that touches the
+// database, so every request waits for a live connection first. This
+// was previously placed after the routes, which meant it never ran in
+// time and caused "buffering timed out" errors on cold starts.
 app.use(async (req, res, next) => {
   await connectDB();
   next();
 });
+
+
+// Root route
+app.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "Task Manager API is running",
+  });
+});
+
+
+// Routes
+app.use("/api/auth", authRoutes);
+
+app.use("/api/tasks", taskRoutes);
+
+
+// 404
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: "Route not found",
+  });
+});
+
+
+// Error middleware
+app.use(errorHandler);
 
 
 // --- Local dev only ---
